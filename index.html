@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HuishoudTaken</title>
-    <link rel="icon" href="/Cleaning_tools.png">
+    <link rel="icon" href="/Cleaning_tools.png" />
     <style>
       body {
         font-family: sans-serif;
@@ -219,35 +219,49 @@
       function renderTasks() {
         const list = document.getElementById("list");
         list.innerHTML = "";
-        tasks.forEach((task) => {
-          if (currentFilter !== "all" && task.repeat !== currentFilter) return;
-          if (shouldReset(task)) {
-            updateDoc(doc(db, "tasks", task.id), {
-              done: false,
-              lastReset: new Date().toISOString(),
-              completedAt: null,
-            });
-          }
-          const li = document.createElement("li");
-          if (task.done) li.classList.add("done");
-          li.classList.add(task.repeat);
-          const span = document.createElement("span");
-          span.textContent = `${task.text}`;
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.checked = task.done;
-          checkbox.addEventListener("change", () =>
-            toggleTask(task.id, task.done)
-          );
-          const deleteBtn = document.createElement("button");
-          deleteBtn.textContent = "🗑️";
-          deleteBtn.style.marginLeft = "8px";
-          deleteBtn.addEventListener("click", () => deleteTask(task.id));
-          li.appendChild(checkbox);
-          li.appendChild(span);
-          li.appendChild(deleteBtn);
-          list.appendChild(li);
-        });
+
+        const order = [
+          "none",
+          "daily",
+          "weekly",
+          "monthly",
+          "halfyearly",
+          "yearly",
+        ];
+
+        tasks
+          .slice()
+          .sort((a, b) => order.indexOf(a.repeat) - order.indexOf(b.repeat))
+          .forEach((task) => {
+            if (currentFilter !== "all" && task.repeat !== currentFilter)
+              return;
+            if (shouldReset(task)) {
+              updateDoc(doc(db, "tasks", task.id), {
+                done: false,
+                lastReset: new Date().toISOString(),
+                completedAt: null,
+              });
+            }
+            const li = document.createElement("li");
+            if (task.done) li.classList.add("done");
+            li.classList.add(task.repeat);
+            const span = document.createElement("span");
+            span.textContent = `${task.text}`;
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = task.done;
+            checkbox.addEventListener("change", () =>
+              toggleTask(task.id, task.done)
+            );
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "🗑️";
+            deleteBtn.style.marginLeft = "8px";
+            deleteBtn.addEventListener("click", () => deleteTask(task.id));
+            li.appendChild(checkbox);
+            li.appendChild(span);
+            li.appendChild(deleteBtn);
+            list.appendChild(li);
+          });
       }
 
       async function addTask() {
@@ -309,7 +323,7 @@
       }
 
       onAuthStateChanged(auth, (user) => {
-        console.log(user.uid)
+        console.log(user.uid);
         if (user) {
           document.getElementById("loginSection").style.display = "none";
           document.getElementById("taskSection").style.display = "block";
