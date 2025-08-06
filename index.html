@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HuishoudTaken</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 1rem;
+        max-width: 600px;
+        margin: auto;
+      }
+      input,
+      select,
+      button {
+        width: 100%;
+        padding: 0.5rem;
+        margin-top: 0.5rem;
+        box-sizing: border-box;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+      }
+      li {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border-bottom: 1px solid #ccc;
+      }
+      li input[type="checkbox"] {
+        justify-self: start;
+      }
+      li button {
+        justify-self: end;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+      }
+      li span {
+        text-align: center;
+        word-wrap: break-word;
+        white-space: normal;
+      }
+      .done {
+        text-decoration: line-through;
+        color: gray;
+      }
+      nav {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+      }
+      nav button {
+        flex: 1;
+        padding: 0.5rem;
+        border: none;
+        background: #eee;
+        cursor: pointer;
+      }
+      nav button.active {
+        background: #007bff;
+        color: white;
+      }
+      .daily {
+        background-color: #e0f7fa;
+      }
+      .weekly {
+        background-color: #f1f8e9;
+      }
+      .monthly {
+        background-color: #fff3e0;
+      }
+      .halfyearly {
+        background-color: #f3e5f5;
+      }
+      .yearly {
+        background-color: #e0e0e0;
+      }
+      nav button.daily {
+        background-color: #e0f7fa;
+      }
+      nav button.weekly {
+        background-color: #f1f8e9;
+      }
+      nav button.monthly {
+        background-color: #fff3e0;
+      }
+      nav button.halfyearly {
+        background-color: #f3e5f5;
+      }
+      nav button.yearly {
+        background-color: #e0e0e0;
+      }
+      h1 {
+        text-align: center;
+      }
+      #taskSection {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Taken à la Casa</h1>
+
+    <!-- Login Form -->
+    <div id="loginSection">
+      <input id="email" type="email" placeholder="E-mail" />
+      <input id="password" type="password" placeholder="Wachtwoord" />
+      <button onclick="login()">Inloggen</button>
+    </div>
+
+    <!-- Takenlijst sectie -->
+    <div id="taskSection">
+      <nav id="nav">
+        <button onclick="setFilter('all')" class="active">Alle</button>
+        <button onclick="setFilter('daily')" class="daily">Dagelijks</button>
+        <button onclick="setFilter('weekly')" class="weekly">Wekelijks</button>
+        <button onclick="setFilter('monthly')" class="monthly">
+          Maandelijks
+        </button>
+        <button onclick="setFilter('halfyearly')" class="halfyearly">
+          Halfjaarlijks
+        </button>
+        <button onclick="setFilter('yearly')" class="yearly">Jaarlijks</button>
+      </nav>
+
+      <input id="task" placeholder="Nieuwe taak..." />
+      <select id="repeat">
+        <option value="none">Eenmalig</option>
+        <option value="daily">Dagelijks</option>
+        <option value="weekly">Wekelijks</option>
+        <option value="monthly">Maandelijks</option>
+        <option value="halfyearly">Halfjaarlijks</option>
+        <option value="yearly">Jaarlijks</option>
+      </select>
+      <button onclick="addTask()">Toevoegen</button>
+      <ul id="list"></ul>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        onSnapshot,
+        updateDoc,
+        deleteDoc,
+        doc,
+      } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+      import {
+        getAuth,
+        signInWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyCvayH_UWKE9l5Rnd3Hw_1WyArLDLHnYeY",
+        authDomain: "huishoudtaken-8148d.firebaseapp.com",
+        projectId: "huishoudtaken-8148d",
+        storageBucket: "huishoudtaken-8148d.firebasestorage.app",
+        messagingSenderId: "539800323332",
+        appId: "1:539800323332:web:cb34fdc412f5d3cbf93c51",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const auth = getAuth(app);
+
+      let tasks = [];
+      let currentFilter = "all";
+      let unsubscribeTasks = null;
+
+      function setFilter(filter) {
+        currentFilter = filter;
+        document
+          .querySelectorAll("nav button")
+          .forEach((btn) => btn.classList.remove("active"));
+        document
+          .querySelector(`nav button[onclick="setFilter('${filter}')"]`)
+          .classList.add("active");
+        renderTasks();
+      }
+
+      function shouldReset(task) {
+        const now = new Date();
+        const last = new Date(task.lastReset || task.createdAt);
+        const diffDays = Math.floor((now - last) / (1000 * 60 * 60 * 24));
+        switch (task.repeat) {
+          case "daily":
+            return diffDays >= 1;
+          case "weekly":
+            return diffDays >= 7;
+          case "monthly":
+            return (
+              now.getMonth() !== last.getMonth() ||
+              now.getFullYear() !== last.getFullYear()
+            );
+          case "halfyearly":
+            return (
+              now.getFullYear() !== last.getFullYear() ||
+              Math.abs(now.getMonth() - last.getMonth()) >= 6
+            );
+          case "yearly":
+            return now.getFullYear() !== last.getFullYear();
+          default:
+            return false;
+        }
+      }
+
+      function renderTasks() {
+        const list = document.getElementById("list");
+        list.innerHTML = "";
+        tasks.forEach((task) => {
+          if (currentFilter !== "all" && task.repeat !== currentFilter) return;
+          if (shouldReset(task)) {
+            updateDoc(doc(db, "tasks", task.id), {
+              done: false,
+              lastReset: new Date().toISOString(),
+              completedAt: null,
+            });
+          }
+          const li = document.createElement("li");
+          if (task.done) li.classList.add("done");
+          li.classList.add(task.repeat);
+          const span = document.createElement("span");
+          span.textContent = `${task.text}`;
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = task.done;
+          checkbox.addEventListener("change", () =>
+            toggleTask(task.id, task.done)
+          );
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "🗑️";
+          deleteBtn.style.marginLeft = "8px";
+          deleteBtn.addEventListener("click", () => deleteTask(task.id));
+          li.appendChild(checkbox);
+          li.appendChild(span);
+          li.appendChild(deleteBtn);
+          list.appendChild(li);
+        });
+      }
+
+      async function addTask() {
+        const input = document.getElementById("task");
+        const repeat = document.getElementById("repeat").value;
+        if (!input.value.trim()) return;
+        const task = {
+          text: input.value.trim(),
+          done: false,
+          repeat: repeat,
+          createdAt: new Date().toISOString(),
+          lastReset: new Date().toISOString(),
+          completedAt: null,
+        };
+        try {
+          await addDoc(collection(db, "tasks"), task);
+        } catch (err) {
+          console.error("Fout bij toevoegen:", err);
+        } finally {
+          input.value = "";
+        }
+      }
+
+      async function deleteTask(id) {
+        await deleteDoc(doc(db, "tasks", id));
+      }
+
+      async function toggleTask(id, done) {
+        await updateDoc(doc(db, "tasks", id), {
+          done: !done,
+          completedAt: !done ? new Date().toISOString() : null,
+        });
+      }
+
+      function startTaskListener() {
+        if (unsubscribeTasks) unsubscribeTasks();
+        unsubscribeTasks = onSnapshot(collection(db, "tasks"), (snapshot) => {
+          tasks = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          }));
+          renderTasks();
+        });
+      }
+
+      // AUTH
+      async function login() {
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+          alert("Fout bij inloggen: " + error.message);
+        }
+      }
+
+      function logout() {
+        signOut(auth);
+      }
+
+      onAuthStateChanged(auth, (user) => {
+        console.log(user.uid)
+        if (user) {
+          document.getElementById("loginSection").style.display = "none";
+          document.getElementById("taskSection").style.display = "block";
+          startTaskListener();
+        } else {
+          document.getElementById("loginSection").style.display = "block";
+          document.getElementById("taskSection").style.display = "none";
+          if (unsubscribeTasks) unsubscribeTasks();
+        }
+      });
+
+      // Maak functies beschikbaar voor HTML
+      window.login = login;
+      window.logout = logout;
+      window.setFilter = setFilter;
+      window.addTask = addTask;
+    </script>
+  </body>
+</html>
